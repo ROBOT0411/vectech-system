@@ -3,652 +3,384 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>設備試作管理系統 V1.0</title>
+    <title>Vectech 設備試做管理系統</title>
 
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" type="text/css" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css" />
     
-    <!-- React & Babel -->
     <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
     <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
     <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.10/babel.min.js"></script>
 
-    <!-- 引入專業圖表庫 Recharts 與依賴項 -->
-    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/prop-types/15.8.1/prop-types.min.js"></script>
-    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/recharts/2.12.7/Recharts.js"></script>
-
-    <!-- Firebase SDKs -->
+    <!-- 步驟 1：擴充 Firebase 功能匯入 -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-app.js";
-        import { getFirestore, collection, addDoc, doc, getDoc, setDoc, onSnapshot, query, deleteDoc } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-auth.js";
+        // 新增匯入 getDocs, deleteDoc, doc, query, orderBy
+        import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-auth.js";
 
-        // 本地與公開網頁執行的金鑰 (請保持原樣以連接你的資料庫)
-        const myFirebaseConfig = {
+        const firebaseConfig = {
             apiKey: "AIzaSyDF60MPyZUaGHzP3k4bb4NLvdZ0yxbV0Cc",
             authDomain: "vectech-v2-d7e70.firebaseapp.com",
+            databaseURL: "https://vectech-v2-d7e70-default-rtdb.asia-southeast1.firebasedatabase.app",
             projectId: "vectech-v2-d7e70",
             storageBucket: "vectech-v2-d7e70.firebasestorage.app",
             messagingSenderId: "122334953792",
-            appId: "1:122334953792:web:29b213c3fb50a25473faa5"
+            appId: "1:122334953792:web:29b213c3fb50a25473faa5",
+            measurementId: "G-BYFXC882NV"
         };
 
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : myFirebaseConfig;
-        const currentAppId = typeof __app_id !== 'undefined' ? __app_id : 'vectech-local-app';
-        const initialToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-        try {
-            const app = initializeApp(firebaseConfig);
-            const db = getFirestore(app);
-            const auth = getAuth(app);
-
-            window.firebaseSystem = { 
-                db, auth, appId: currentAppId, initialToken,
-                collection, addDoc, doc, getDoc, setDoc, onSnapshot, query, deleteDoc,
-                signInAnonymously, onAuthStateChanged, signInWithCustomToken
-            };
-            window.firebaseReady = true;
-        } catch (e) {
-            console.error("Firebase SDK 載入錯誤:", e);
-        }
+        const app = initializeApp(firebaseConfig);
+        window.db = getFirestore(app);
+        window.auth = getAuth(app);
+        // 將新功能綁定到 window.fs 供 React 使用
+        window.fs = { collection, addDoc, signInAnonymously, getDocs, deleteDoc, doc, query, orderBy };
+        window.firebaseReady = true;
     </script>
 
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
-        body { font-family: 'Noto Sans TC', sans-serif; background-color: #f8fafc; color: #0f172a; }
-        .professional-input { width: 100%; padding: 0.875rem 1rem; background: #f8fafc; border: 2px solid #e2e8f0; border-radius: 0.75rem; outline: none; transition: all 0.3s; }
-        .professional-input:focus { border-color: #3b82f6; background: #ffffff; box-shadow: 0 4px 15px rgba(59,130,246,0.1); }
-        .card-hover { transition: transform 0.2s, box-shadow 0.2s; }
-        .card-hover:hover { transform: translateY(-4px); box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap');
+        body { font-family: 'Noto Sans TC', sans-serif; background-color: #f1f5f9; color: #1e293b; }
+        .professional-input { width: 100%; padding: 1rem; background: white; border: 2px solid #e2e8f0; border-radius: 1rem; outline: none; transition: all 0.3s; }
+        .professional-input:focus { border-color: #3b82f6; box-shadow: 0 4px 15px rgba(59,130,246,0.15); }
         
-        @keyframes modalFadeIn {
-            from { opacity: 0; transform: scale(0.95); }
-            to { opacity: 1; transform: scale(1); }
-        }
-        .modal-animate { animation: modalFadeIn 0.2s ease-out forwards; }
-
-        /* 列印與 PDF 匯出專用樣式 */
-        @media print {
-            @page { size: landscape; margin: 10mm; }
-            body { background-color: white !important; }
-            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-            .print-break-inside-avoid { break-inside: avoid; }
-        }
+        /* 自訂卷軸樣式讓表格更好看 */
+        .custom-scrollbar::-webkit-scrollbar { height: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
     <script type="text/babel" data-presets="react,env">
-        const { useState, useEffect, useMemo } = React;
-        const { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } = window.Recharts || {};
+        const { useState, useEffect } = React;
 
-        // KPI 客製化圖表提示框
-        const KpiTooltip = ({ active, payload, label }) => {
-            if (active && payload && payload.length) {
-                const data = payload[0].payload;
-                return (
-                    <div className="bg-white/95 backdrop-blur-sm p-4 border border-slate-200 rounded-xl shadow-xl z-50">
-                        <p className="font-black text-slate-800 mb-2 border-b pb-1">{label} 的業績數據</p>
-                        <p className="text-sm font-bold text-slate-500 mb-1">🎯 目標：<span className="text-slate-800">{data.target} 家</span></p>
-                        <p className="text-sm font-black text-indigo-600 mb-1">🚀 達成：{data.achieved} 家</p>
-                        <p className="text-sm font-bold text-emerald-600 mt-2 pt-2 border-t border-slate-100">達成率：{data.percent}%</p>
-                    </div>
-                );
-            }
-            return null;
-        };
+        // --- 填寫表單元件 (原本的內容) ---
+        const SubmitForm = ({ setStatusMsg, statusMsg }) => {
+            const [formData, setFormData] = useState({ equipmentModel: "", batchNumber: "", testData: "", anomaly: "" });
 
-        // 設備統計客製化圖表提示框
-        const EqTooltip = ({ active, payload, label }) => {
-            if (active && payload && payload.length) {
-                const data = payload[0].payload;
-                return (
-                    <div className="bg-white/95 backdrop-blur-sm p-4 border border-slate-200 rounded-xl shadow-xl z-50">
-                        <p className="font-black text-slate-800 mb-2 border-b pb-1">{label}</p>
-                        <p className="text-sm font-black text-amber-600">📊 案件數：{data.count} 件</p>
-                    </div>
-                );
-            }
-            return null;
-        };
+            const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
-        const App = () => {
-            const [isReady, setIsReady] = useState(false);
-            const [user, setUser] = useState(null);
-            const [statusMsg, setStatusMsg] = useState("正在啟動系統環境...");
-            const [currentView, setCurrentView] = useState('lobby');
-            const [cases, setCases] = useState([]);
-            const [adminConfig, setAdminConfig] = useState(null);
-
-            const [salesFormData, setSalesFormData] = useState({
-                date: new Date().toISOString().split('T')[0],
-                salesperson: "Alston",
-                clientName: "",
-                equipmentCategory: "自動焊錫機", 
-                equipmentModel: "",
-                status: "評估中",
-                progress: "",
-                source: "網路客戶詢問"
-            });
-            const [loginPassword, setLoginPassword] = useState("");
-            const [newPassword, setNewPassword] = useState("");
-            const [loginError, setLoginError] = useState("");
-            const [formStatus, setFormStatus] = useState({ type: '', msg: '' });
-            const [deleteModal, setDeleteModal] = useState({ isOpen: false, caseId: null, caseName: '' });
-
-            const currentDate = new Date();
-            const currentYearStr = currentDate.getFullYear().toString();
-            const currentMonthStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
-            
-            const [filterPeriod, setFilterPeriod] = useState('month'); 
-            const [filterValue, setFilterValue] = useState(currentMonthStr); 
-
-            // 預設資料設定
-            const salesOptions = ["Alston", "Alex", "Chris", "Hank"];
-            const statusOptions = ["評估中", "試作中", "測試完成", "已結案", "暫停/取消"];
-            const sourceOptions = ["網路客戶詢問", "正航業務開發", "新客戶開發", "經銷商介紹"];
-            const equipmentCategories = ["自動焊錫機", "自動鎖螺絲機", "自動點膠機", "hot bar熱壓機", "BGA返修設備", "選擇性波峰焊設備", "其他"];
-            const kpiTargets = { "Alston": 5, "Alex": 5, "Chris": 3, "Hank": 2 };
-
-            useEffect(() => {
-                const initTimer = setInterval(async () => {
-                    if (window.firebaseReady && window.firebaseSystem) {
-                        clearInterval(initTimer);
-                        const fs = window.firebaseSystem;
-                        try {
-                            if (fs.initialToken) {
-                                await fs.signInWithCustomToken(fs.auth, fs.initialToken);
-                            } else {
-                                await fs.signInAnonymously(fs.auth);
-                            }
-                            fs.onAuthStateChanged(fs.auth, (currentUser) => {
-                                setUser(currentUser);
-                                setIsReady(true);
-                            });
-                        } catch (error) {
-                            setStatusMsg("資料庫連線失敗，請檢查金鑰或網路：" + error.message);
-                        }
-                    }
-                }, 100);
-                return () => clearInterval(initTimer);
-            }, []);
-
-            useEffect(() => {
-                if (!user || !window.firebaseSystem) return;
-                const fs = window.firebaseSystem;
-
-                const casesRef = fs.collection(fs.db, 'artifacts', fs.appId, 'public', 'data', 'cases');
-                const unsubscribeCases = fs.onSnapshot(casesRef, (snapshot) => {
-                    const loadedCases = [];
-                    snapshot.forEach((doc) => loadedCases.push({ id: doc.id, ...doc.data() }));
-                    loadedCases.sort((a, b) => new Date(b.date) - new Date(a.date));
-                    setCases(loadedCases);
-                });
-
-                const configRef = fs.doc(fs.db, 'artifacts', fs.appId, 'public', 'data', 'config', 'adminSettings');
-                fs.getDoc(configRef).then(async (docSnap) => {
-                    if (docSnap.exists()) {
-                        setAdminConfig(docSnap.data());
-                    } else {
-                        const defaultConfig = { password: "123456" };
-                        await fs.setDoc(configRef, defaultConfig);
-                        setAdminConfig(defaultConfig);
-                    }
-                });
-
-                return () => unsubscribeCases();
-            }, [user]);
-
-            // === 表單處理 ===
-            const handleSalesFormChange = (e) => setSalesFormData({ ...salesFormData, [e.target.name]: e.target.value });
-
-            const handleSalesSubmit = async (e) => {
+            const handleSubmit = async (e) => {
                 e.preventDefault();
-                setFormStatus({ type: 'loading', msg: '資料上傳中...' });
+                setStatusMsg("資料上傳中...");
                 try {
-                    const fs = window.firebaseSystem;
-                    const casesRef = fs.collection(fs.db, 'artifacts', fs.appId, 'public', 'data', 'cases');
-                    await fs.addDoc(casesRef, { ...salesFormData, createdAt: new Date().toISOString() });
-                    setFormStatus({ type: 'success', msg: '✅ 案件已成功立項！' });
-                    setSalesFormData(prev => ({ ...prev, clientName: "", equipmentModel: "", progress: "" })); 
-                    setTimeout(() => setFormStatus({ type: '', msg: '' }), 3000);
+                    await window.fs.addDoc(window.fs.collection(window.db, "vectech_cases"), {
+                        ...formData,
+                        createdAt: new Date().toISOString()
+                    });
+                    setStatusMsg("✅ 資料已成功上傳至雲端！");
+                    setFormData({ equipmentModel: "", batchNumber: "", testData: "", anomaly: "" });
+                    setTimeout(() => setStatusMsg(""), 3000);
                 } catch (error) {
-                    setFormStatus({ type: 'error', msg: '❌ 上傳失敗，請稍後再試。' });
+                    console.error("寫入錯誤:", error);
+                    setStatusMsg("❌ 上傳失敗，請確認資料庫是否已開啟「測試模式」。");
                 }
             };
-
-            const handleAdminLogin = (e) => {
-                e.preventDefault();
-                if (adminConfig && loginPassword === adminConfig.password) {
-                    setLoginError(""); setLoginPassword(""); setCurrentView('admin_dashboard');
-                } else {
-                    setLoginError("密碼錯誤，請重新輸入。");
-                }
-            };
-
-            const handleChangePassword = async (e) => {
-                e.preventDefault();
-                if (!newPassword || newPassword.length < 4) {
-                    setFormStatus({ type: 'error', msg: '密碼長度需至少4個字元' });
-                    setTimeout(() => setFormStatus({ type: '', msg: '' }), 3000);
-                    return;
-                }
-                try {
-                    const fs = window.firebaseSystem;
-                    const configRef = fs.doc(fs.db, 'artifacts', fs.appId, 'public', 'data', 'config', 'adminSettings');
-                    await fs.setDoc(configRef, { password: newPassword }, { merge: true });
-                    setAdminConfig({ ...adminConfig, password: newPassword });
-                    setNewPassword("");
-                    setFormStatus({ type: 'success', msg: '✅ 密碼修改成功！' });
-                    setTimeout(() => setFormStatus({ type: '', msg: '' }), 4000);
-                } catch (err) { console.error(err); }
-            };
-
-            const handleDeleteCase = async () => {
-                if (!deleteModal.caseId) return;
-                try {
-                    const fs = window.firebaseSystem;
-                    const docRef = fs.doc(fs.db, 'artifacts', fs.appId, 'public', 'data', 'cases', deleteModal.caseId);
-                    await fs.deleteDoc(docRef);
-                    setDeleteModal({ isOpen: false, caseId: null, caseName: '' });
-                } catch (error) { console.error(error); }
-            };
-
-            // === 數據統計與 KPI 運算 ===
-            const activeMonth = useMemo(() => filterPeriod === 'month' ? filterValue : `${filterValue}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`, [filterPeriod, filterValue]);
-            const activeYear = useMemo(() => filterPeriod === 'month' ? filterValue.substring(0, 4) : filterValue, [filterPeriod, filterValue]);
-
-            const monthlyCases = useMemo(() => cases.filter(c => c.date.startsWith(activeMonth)), [cases, activeMonth]);
-            const yearlyCases = useMemo(() => cases.filter(c => c.date.startsWith(activeYear)), [cases, activeYear]);
-            const filteredCases = filterPeriod === 'month' ? monthlyCases : yearlyCases;
-
-            const monthlyKpiData = useMemo(() => {
-                return salesOptions.map(name => {
-                    const target = kpiTargets[name];
-                    const achieved = monthlyCases.filter(c => c.salesperson === name).length;
-                    const percent = target > 0 ? Math.min(Math.round((achieved / target) * 100), 100) : 0;
-                    return { name, target, achieved, percent };
-                });
-            }, [monthlyCases]);
-
-            const yearlyKpiData = useMemo(() => {
-                return salesOptions.map(name => {
-                    const target = kpiTargets[name] * 12; 
-                    const achieved = yearlyCases.filter(c => c.salesperson === name).length;
-                    const percent = target > 0 ? Math.min(Math.round((achieved / target) * 100), 100) : 0;
-                    return { name, target, achieved, percent };
-                });
-            }, [yearlyCases]);
-
-            const equipmentStats = useMemo(() => {
-                return equipmentCategories.map(category => {
-                    const count = filteredCases.filter(c => (c.equipmentCategory || "其他") === category).length;
-                    return { name: category, count };
-                });
-            }, [filteredCases]);
-
-            // === 進階匯出 Excel ===
-            const exportToExcel = () => {
-                if (filteredCases.length === 0) {
-                    setFormStatus({ type: 'error', msg: '該區間目前無資料可匯出' });
-                    setTimeout(() => setFormStatus({ type: '', msg: '' }), 3000);
-                    return;
-                }
-                
-                const header = "建立日期,日期,負責業務,客戶來源,客戶名稱,設備類別,詳細型號,案件狀態,詳細進度\n";
-                const rows = filteredCases.map(c => {
-                    const createdDate = new Date(c.createdAt).toLocaleDateString('zh-TW');
-                    const safe = (str) => `"${(str || '').replace(/"/g, '""')}"`;
-                    return `${safe(createdDate)},${safe(c.date)},${safe(c.salesperson)},${safe(c.source || '')},${safe(c.clientName)},${safe(c.equipmentCategory || '其他')},${safe(c.equipmentModel)},${safe(c.status)},${safe(c.progress)}`;
-                }).join("\n");
-                
-                let kpiSection = "\n\n=== KPI 達標分析 ===\n分析項目,業務人員,目標家數,已達成家數,達成率\n";
-                monthlyKpiData.forEach(k => kpiSection += `單月 (${activeMonth}),${k.name},${k.target},${k.achieved},${k.percent}%\n`);
-                yearlyKpiData.forEach(k => kpiSection += `年度 (${activeYear}),${k.name},${k.target},${k.achieved},${k.percent}%\n`);
-
-                let eqSection = "\n\n=== 設備試作種類分析 ===\n設備類別,案件數量\n";
-                equipmentStats.forEach(eq => {
-                    eqSection += `${eq.name},${eq.count}\n`;
-                });
-
-                const csvContent = "\uFEFF" + header + rows + kpiSection + eqSection;
-                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                const link = document.createElement("a");
-                link.href = URL.createObjectURL(blob);
-                link.download = `案件與數據總表_${filterValue}.csv`;
-                link.style.display = 'none';
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-            };
-
-            // === 畫面渲染 ===
-            const renderLobby = () => (
-                <div className="flex flex-col md:flex-row gap-6 justify-center items-center h-full mt-10">
-                    <div onClick={() => setCurrentView('sales_form')} className="bg-white p-10 rounded-3xl shadow-lg w-full md:w-80 flex flex-col items-center cursor-pointer card-hover border-t-8 border-blue-500">
-                        <div className="bg-blue-100 p-6 rounded-full mb-6"><i className="ph ph-briefcase text-5xl text-blue-600"></i></div>
-                        <h2 className="text-2xl font-black mb-2">業務人員入口</h2>
-                        <p className="text-slate-500 text-center">新增案件、回報進度與客戶狀態</p>
-                    </div>
-                    <div onClick={() => setCurrentView('admin_login')} className="bg-white p-10 rounded-3xl shadow-lg w-full md:w-80 flex flex-col items-center cursor-pointer card-hover border-t-8 border-slate-800">
-                        <div className="bg-slate-100 p-6 rounded-full mb-6"><i className="ph ph-shield-check text-5xl text-slate-800"></i></div>
-                        <h2 className="text-2xl font-black mb-2">管理階層入口</h2>
-                        <p className="text-slate-500 text-center">視覺化數據、圖表分析與報表匯出</p>
-                    </div>
-                </div>
-            );
-
-            const renderSalesForm = () => (
-                <div className="bg-white p-8 rounded-3xl shadow-xl animate-fade-in relative">
-                    <button onClick={() => setCurrentView('lobby')} className="absolute top-6 left-6 text-slate-400 hover:text-slate-800 transition">
-                        <i className="ph ph-arrow-left text-3xl"></i>
-                    </button>
-                    <div className="flex flex-col items-center mb-8 pt-4">
-                        <div className="bg-blue-100 p-4 rounded-full mb-4"><i className="ph ph-briefcase text-3xl text-blue-600"></i></div>
-                        <h1 className="text-2xl font-black">業務案件建檔與追蹤</h1>
-                    </div>
-                    <form onSubmit={handleSalesSubmit} className="space-y-5">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                            <div>
-                                <label className="block text-sm font-bold text-slate-500 mb-2">負責業務</label>
-                                <div className="relative">
-                                    <select name="salesperson" value={salesFormData.salesperson} onChange={handleSalesFormChange} className="professional-input appearance-none">
-                                        {salesOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                                    </select>
-                                    <i className="ph ph-caret-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-bold text-slate-500 mb-2">日期</label>
-                                <input required type="date" name="date" value={salesFormData.date} onChange={handleSalesFormChange} className="professional-input" />
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                            <div>
-                                <label className="block text-sm font-bold text-slate-500 mb-2">客戶來源</label>
-                                <div className="relative">
-                                    <select name="source" value={salesFormData.source} onChange={handleSalesFormChange} className="professional-input appearance-none">
-                                        {sourceOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                                    </select>
-                                    <i className="ph ph-caret-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-bold text-slate-500 mb-2">客戶名稱</label>
-                                <input required type="text" name="clientName" value={salesFormData.clientName} onChange={handleSalesFormChange} className="professional-input" placeholder="手動輸入公司名稱" />
-                            </div>
-                        </div>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                            <div>
-                                <label className="block text-sm font-bold text-slate-500 mb-2">設備類別</label>
-                                <div className="relative">
-                                    <select name="equipmentCategory" value={salesFormData.equipmentCategory} onChange={handleSalesFormChange} className="professional-input appearance-none">
-                                        {equipmentCategories.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                                    </select>
-                                    <i className="ph ph-caret-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-bold text-slate-500 mb-2">詳細型號 (選填)</label>
-                                <input type="text" name="equipmentModel" value={salesFormData.equipmentModel} onChange={handleSalesFormChange} className="professional-input" placeholder="例如: V-1000" />
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                            <div>
-                                <label className="block text-sm font-bold text-slate-500 mb-2">案件狀態</label>
-                                <div className="relative">
-                                    <select name="status" value={salesFormData.status} onChange={handleSalesFormChange} className="professional-input appearance-none">
-                                        {statusOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                                    </select>
-                                    <i className="ph ph-caret-down absolute right-4 top-4 text-slate-400 pointer-events-none"></i>
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-bold text-slate-500 mb-2">詳細進度 (手動填寫)</label>
-                                <input required type="text" name="progress" value={salesFormData.progress} onChange={handleSalesFormChange} className="professional-input" placeholder="例如：約定下週三產線試跑" />
-                            </div>
-                        </div>
-
-                        {formStatus.msg && (
-                            <div className={`p-4 rounded-xl font-bold text-center mt-4 ${formStatus.type === 'success' ? 'bg-green-100 text-green-700' : formStatus.type === 'error' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
-                                {formStatus.msg}
-                            </div>
-                        )}
-                        <button type="submit" className="w-full mt-6 bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl transition-colors shadow-lg shadow-blue-600/30">儲存案件資料</button>
-                    </form>
-                </div>
-            );
-
-            const renderAdminLogin = () => (
-                <div className="max-w-md mx-auto bg-white p-8 rounded-3xl shadow-xl mt-10 relative">
-                    <button onClick={() => setCurrentView('lobby')} className="absolute top-6 left-6 text-slate-400 hover:text-slate-800 transition"><i className="ph ph-arrow-left text-3xl"></i></button>
-                    <div className="flex flex-col items-center mb-8 pt-4">
-                        <div className="bg-slate-100 p-4 rounded-full mb-4"><i className="ph ph-lock-key text-3xl text-slate-800"></i></div>
-                        <h1 className="text-2xl font-black">管理階層登入</h1>
-                        <p className="text-slate-500 mt-2 text-sm">預設密碼為 123456</p>
-                    </div>
-                    <form onSubmit={handleAdminLogin}>
-                        <div className="mb-6">
-                            <input type="password" required value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} className="professional-input text-center text-xl tracking-widest" placeholder="請輸入密碼" />
-                        </div>
-                        {loginError && <p className="text-red-500 font-bold text-center mb-4">{loginError}</p>}
-                        <button type="submit" className="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-4 rounded-xl transition-colors">進入後台</button>
-                    </form>
-                </div>
-            );
-
-            const renderAdminDashboard = () => {
-                const totalCases = filteredCases.length;
-                const activeCases = filteredCases.filter(c => c.status !== '已結案' && c.status !== '暫停/取消').length;
-                const closedCases = filteredCases.filter(c => c.status === '已結案').length;
-                
-                return (
-                    <div className="bg-white p-6 md:p-10 rounded-3xl shadow-xl w-full animate-fade-in relative">
-                        <div className="hidden print:block mb-8 text-center border-b-2 border-slate-800 pb-6">
-                            <h1 className="text-3xl font-black text-slate-800">設備試作管理系統 - 數據分析報告</h1>
-                            <p className="text-slate-500 font-bold mt-3">報告產出時間：{new Date().toLocaleString('zh-TW')}</p>
-                            <p className="text-slate-800 text-lg font-bold mt-1">分析區間：{filterPeriod === 'month' ? `單月 (${activeMonth})` : `全年度 (${activeYear})`}</p>
-                        </div>
-
-                        {deleteModal.isOpen && (
-                            <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 print:hidden">
-                                <div className="bg-white p-8 rounded-2xl shadow-2xl max-w-sm w-full mx-4 modal-animate">
-                                    <div className="text-red-500 mb-4 flex justify-center"><i className="ph ph-warning-circle text-6xl"></i></div>
-                                    <h3 className="text-xl font-black text-center mb-2 text-slate-800">確定要刪除這筆資料嗎？</h3>
-                                    <p className="text-slate-500 text-center mb-6 font-bold">
-                                        客戶：<span className="text-slate-800">{deleteModal.caseName}</span><br/><span className="text-sm text-red-500 mt-1 block">此操作無法復原。</span>
-                                    </p>
-                                    <div className="flex gap-3">
-                                        <button onClick={() => setDeleteModal({ isOpen: false, caseId: null, caseName: '' })} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded-xl transition">取消</button>
-                                        <button onClick={handleDeleteCase} className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-3 rounded-xl transition shadow-lg shadow-red-500/30">確認刪除</button>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 border-b pb-6 gap-4 print:hidden">
-                            <div className="flex items-center gap-4">
-                                <button onClick={() => setCurrentView('lobby')} className="text-slate-400 hover:text-slate-800 transition"><i className="ph ph-house text-3xl"></i></button>
-                                <h1 className="text-2xl md:text-3xl font-black text-slate-800">管理階層儀表板</h1>
-                            </div>
-                            <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
-                                <button onClick={() => window.print()} className="bg-slate-800 hover:bg-slate-900 text-white px-5 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition w-full md:w-auto shadow-lg shadow-slate-800/30">
-                                    <i className="ph ph-printer text-xl"></i><span>列印圖表報表 (PDF)</span>
-                                </button>
-                                <button onClick={exportToExcel} className="bg-green-600 hover:bg-green-700 text-white px-5 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition w-full md:w-auto shadow-lg shadow-green-600/30">
-                                    <i className="ph ph-file-csv text-xl"></i><span>匯出明細與數據 (Excel)</span>
-                                </button>
-                            </div>
-                        </div>
-
-                        <div className="bg-slate-100 p-4 rounded-2xl mb-8 flex flex-col md:flex-row gap-4 items-center print:hidden">
-                            <div className="font-bold text-slate-700 flex items-center gap-2"><i className="ph ph-calendar-blank"></i> 資料顯示區間：</div>
-                            <div className="flex gap-2 w-full md:w-auto">
-                                <select value={filterPeriod} onChange={(e) => { const newPeriod = e.target.value; setFilterPeriod(newPeriod); setFilterValue(newPeriod === 'month' ? currentMonthStr : currentYearStr); }} className="bg-white border border-slate-300 rounded-lg px-3 py-2 font-bold text-slate-700 outline-none focus:border-blue-500 shadow-sm">
-                                    <option value="month">按月份分析</option>
-                                    <option value="year">按年度分析</option>
-                                </select>
-                                {filterPeriod === 'month' ? (
-                                    <input type="month" value={filterValue} onChange={e => setFilterValue(e.target.value)} className="bg-white border border-slate-300 rounded-lg px-3 py-2 font-bold text-slate-700 outline-none focus:border-blue-500 flex-1 shadow-sm" />
-                                ) : (
-                                    <select value={filterValue} onChange={e => setFilterValue(e.target.value)} className="bg-white border border-slate-300 rounded-lg px-3 py-2 font-bold text-slate-700 outline-none focus:border-blue-500 flex-1 shadow-sm">
-                                        {[currentDate.getFullYear(), currentDate.getFullYear()-1, currentDate.getFullYear()-2].map(y => <option key={y} value={y}>{y} 年度</option>)}
-                                    </select>
-                                )}
-                            </div>
-                        </div>
-
-                        <div className="mb-8 print-break-inside-avoid">
-                            <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-700"><i className="ph ph-chart-pie-slice"></i> 區間案件總覽</h2>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                <div className="bg-blue-50 p-6 rounded-2xl border border-blue-100"><p className="text-blue-600 font-bold mb-1">總接洽家數</p><p className="text-4xl font-black text-blue-800">{totalCases}</p></div>
-                                <div className="bg-amber-50 p-6 rounded-2xl border border-amber-100"><p className="text-amber-600 font-bold mb-1">進行中案件</p><p className="text-4xl font-black text-amber-800">{activeCases}</p></div>
-                                <div className="bg-emerald-50 p-6 rounded-2xl border border-emerald-100"><p className="text-emerald-600 font-bold mb-1">已結案數</p><p className="text-4xl font-black text-emerald-800">{closedCases}</p></div>
-                            </div>
-                        </div>
-
-                        <div className="bg-amber-50/40 p-6 rounded-2xl border border-amber-200 shadow-sm mb-8 print-break-inside-avoid">
-                            <h2 className="text-lg font-bold mb-6 text-amber-900 flex items-center gap-2">
-                                <i className="ph ph-robot text-xl"></i> 【{filterPeriod === 'month' ? activeMonth : activeYear}】 設備試作種類分析
-                            </h2>
-                            <div className="h-80 w-full">
-                                {window.Recharts && (
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <BarChart data={equipmentStats} layout="vertical" margin={{ top: 10, right: 30, left: 40, bottom: 0 }}>
-                                            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
-                                            <XAxis type="number" axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
-                                            <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#475569', fontSize: 13, fontWeight: 'bold'}} width={130} />
-                                            <Tooltip content={<EqTooltip />} cursor={{fill: '#fef3c7', opacity: 0.5}} />
-                                            <Bar dataKey="count" name="案件數量" fill="#f59e0b" radius={[0, 4, 4, 0]} barSize={24} />
-                                        </BarChart>
-                                    </ResponsiveContainer>
-                                )}
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 print-break-inside-avoid">
-                            <div className="bg-indigo-50/30 p-6 rounded-2xl border border-indigo-100 shadow-sm">
-                                <h2 className="text-lg font-bold mb-6 text-indigo-900 flex items-center gap-2">
-                                    <i className="ph ph-calendar-check text-xl"></i> 【{activeMonth}】 單月 KPI 達成狀況
-                                </h2>
-                                <div className="h-64 w-full">
-                                    {window.Recharts && (
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <BarChart data={monthlyKpiData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#475569', fontSize: 13, fontWeight: 'bold'}} />
-                                                <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
-                                                <Tooltip content={<KpiTooltip />} cursor={{fill: '#e0e7ff', opacity: 0.5}} />
-                                                <Legend wrapperStyle={{ paddingTop: '10px', fontSize: '13px', fontWeight: 'bold', color: '#64748b' }} />
-                                                <Bar dataKey="target" name="目標家數" fill="#cbd5e1" radius={[4, 4, 0, 0]} barSize={24} />
-                                                <Bar dataKey="achieved" name="達成家數" fill="#6366f1" radius={[4, 4, 0, 0]} barSize={24} />
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    )}
-                                </div>
-                            </div>
-                            <div className="bg-emerald-50/30 p-6 rounded-2xl border border-emerald-100 shadow-sm">
-                                <h2 className="text-lg font-bold mb-6 text-emerald-900 flex items-center gap-2">
-                                    <i className="ph ph-flag-checkered text-xl"></i> 【{activeYear}】 年度 KPI 達成狀況
-                                </h2>
-                                <div className="h-64 w-full">
-                                    {window.Recharts && (
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <BarChart data={yearlyKpiData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#475569', fontSize: 13, fontWeight: 'bold'}} />
-                                                <YAxis axisLine={false} tickLine={false} tick={{fill: '#94a3b8', fontSize: 12}} />
-                                                <Tooltip content={<KpiTooltip />} cursor={{fill: '#d1fae5', opacity: 0.5}} />
-                                                <Legend wrapperStyle={{ paddingTop: '10px', fontSize: '13px', fontWeight: 'bold', color: '#64748b' }} />
-                                                <Bar dataKey="target" name="年度目標" fill="#cbd5e1" radius={[4, 4, 0, 0]} barSize={24} />
-                                                <Bar dataKey="achieved" name="年度達成" fill="#10b981" radius={[4, 4, 0, 0]} barSize={24} />
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 mb-10 w-full md:w-1/2 print:hidden">
-                            <h2 className="text-sm font-bold mb-3 text-slate-700 flex items-center gap-2"><i className="ph ph-shield-check text-lg"></i> 管理員密碼設定</h2>
-                            <form onSubmit={handleChangePassword} className="flex gap-2">
-                                <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="professional-input py-2 text-sm flex-1" placeholder="輸入新密碼..." />
-                                <button type="submit" className="bg-slate-800 text-white text-sm font-bold px-4 rounded-xl hover:bg-slate-900 transition whitespace-nowrap">更新</button>
-                            </form>
-                            {formStatus.msg && formStatus.type === 'success' && <p className="font-bold mt-2 text-xs p-2 rounded-lg bg-green-50 text-green-600">{formStatus.msg}</p>}
-                        </div>
-                        
-                        <div className="print-break-inside-avoid">
-                            <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-slate-700">
-                                <i className="ph ph-table"></i> 區間案件明細 <span className="text-sm font-normal text-slate-400">({filteredCases.length} 筆)</span>
-                            </h2>
-                            <div className="overflow-x-auto bg-white border border-slate-200 rounded-2xl">
-                                <table className="w-full text-left border-collapse">
-                                    <thead>
-                                        <tr className="bg-slate-50 text-slate-500 text-sm">
-                                            <th className="p-4 border-b font-bold whitespace-nowrap">日期</th>
-                                            <th className="p-4 border-b font-bold whitespace-nowrap">來源</th>
-                                            <th className="p-4 border-b font-bold whitespace-nowrap">客戶名稱</th>
-                                            <th className="p-4 border-b font-bold whitespace-nowrap">設備類別</th>
-                                            <th className="p-4 border-b font-bold whitespace-nowrap">負責業務</th>
-                                            <th className="p-4 border-b font-bold whitespace-nowrap">狀態</th>
-                                            <th className="p-4 border-b font-bold whitespace-nowrap text-center print:hidden">操作</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {filteredCases.map((c, idx) => (
-                                            <tr key={c.id || idx} className="hover:bg-slate-50 transition border-b last:border-0 group">
-                                                <td className="p-4 text-slate-700 whitespace-nowrap">{c.date}</td>
-                                                <td className="p-4 text-slate-500 text-sm">{c.source || '-'}</td>
-                                                <td className="p-4 font-bold text-slate-800">{c.clientName}</td>
-                                                <td className="p-4 font-bold text-amber-700">
-                                                    {c.equipmentCategory || '其他'}
-                                                    {c.equipmentModel && <div className="text-xs font-normal text-slate-500 mt-1">{c.equipmentModel}</div>}
-                                                </td>
-                                                <td className="p-4 font-bold text-indigo-600">{c.salesperson}</td>
-                                                <td className="p-4 whitespace-nowrap">
-                                                    <span className={`px-3 py-1 rounded-full text-xs font-bold 
-                                                        ${c.status === '評估中' ? 'bg-blue-100 text-blue-700' : 
-                                                          c.status === '已結案' ? 'bg-emerald-100 text-emerald-700' : 
-                                                          c.status.includes('暫停') ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
-                                                        {c.status}
-                                                    </span>
-                                                </td>
-                                                <td className="p-4 text-center print:hidden">
-                                                    <button onClick={() => confirmDelete(c.id, c.clientName)} className="text-slate-300 hover:text-red-500 transition p-2 rounded-lg hover:bg-red-50 opacity-0 group-hover:opacity-100 focus:opacity-100" title="刪除此案件">
-                                                        <i className="ph ph-trash text-xl"></i>
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                        {filteredCases.length === 0 && <tr><td colSpan="7" className="p-8 text-center text-slate-400 font-bold">此區間目前尚無資料</td></tr>}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                );
-            };
-
-            if (!isReady) return <div className="min-h-screen flex flex-col items-center justify-center"><i className="ph ph-spinner-gap animate-spin text-5xl text-blue-600 mb-4"></i><div className="font-bold text-xl text-slate-600">{statusMsg}</div></div>;
 
             return (
-                <div className="min-h-screen p-4 md:p-8 max-w-6xl mx-auto flex flex-col">
-                    <div className="flex items-center gap-3 mb-8 ml-2 print:hidden">
-                        <div className="bg-gradient-to-tr from-blue-600 to-indigo-600 p-2 rounded-xl shadow-lg"><i className="ph ph-cpu text-3xl text-white"></i></div>
-                        <h1 className="text-2xl font-black tracking-wide text-slate-800">
-                            設備試作管理系統 <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-700 text-sm rounded-lg align-middle">V1.0</span>
-                        </h1>
+                <div className="bg-white p-8 rounded-3xl shadow-xl max-w-2xl mx-auto">
+                    <div className="flex items-center gap-3 mb-6">
+                        <i className="ph ph-clipboard-text text-3xl text-blue-600"></i>
+                        <h2 className="text-2xl font-black">設備試做回報</h2>
                     </div>
+                    <form onSubmit={handleSubmit} className="space-y-5">
+                        <div>
+                            <label className="block text-sm font-bold text-slate-500 mb-2">設備型號</label>
+                            <input required type="text" name="equipmentModel" value={formData.equipmentModel} onChange={handleChange} className="professional-input" placeholder="例如：VC-2000" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-bold text-slate-500 mb-2">試做批號</label>
+                            <input required type="text" name="batchNumber" value={formData.batchNumber} onChange={handleChange} className="professional-input" placeholder="例如：B-240501" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-bold text-slate-500 mb-2">測試數據結果</label>
+                            <textarea required name="testData" value={formData.testData} onChange={handleChange} className="professional-input h-24" placeholder="請填寫本次試做的關鍵測試數據..."></textarea>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-bold text-slate-500 mb-2">異常狀況紀錄</label>
+                            <textarea name="anomaly" value={formData.anomaly} onChange={handleChange} className="professional-input h-24" placeholder="若無異常可留白"></textarea>
+                        </div>
+                        <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl transition-colors">
+                            提交回報至雲端
+                        </button>
+                    </form>
+                </div>
+            );
+        };
+
+        // --- 步驟 3：管理介面元件 (Admin Dashboard) ---
+        const AdminDashboard = ({ setStatusMsg }) => {
+            const [cases, setCases] = useState([]);
+            const [selectedIds, setSelectedIds] = useState([]);
+            const [isLoading, setIsLoading] = useState(true);
+            const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, message: '', onConfirm: null });
+
+            // 讀取資料
+            const fetchCases = async () => {
+                setIsLoading(true);
+                try {
+                    // 依照建立時間排序 (最新的在前面)
+                    const q = window.fs.query(window.fs.collection(window.db, "vectech_cases"), window.fs.orderBy("createdAt", "desc"));
+                    const querySnapshot = await window.fs.getDocs(q);
+                    const data = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    setCases(data);
+                } catch (error) {
+                    console.error("讀取錯誤:", error);
+                    setStatusMsg("❌ 讀取資料失敗");
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+
+            useEffect(() => {
+                fetchCases();
+            }, []);
+
+            // 處理單筆選取/取消選取
+            const toggleSelection = (id) => {
+                setSelectedIds(prev => 
+                    prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+                );
+            };
+
+            // 處理全選/全取消
+            const toggleAll = () => {
+                if (selectedIds.length === cases.length) {
+                    setSelectedIds([]); // 全部取消
+                } else {
+                    setSelectedIds(cases.map(c => c.id)); // 全選
+                }
+            };
+
+            // 執行刪除 (單筆)
+            const executeSingleDelete = async (id) => {
+                setStatusMsg("刪除中...");
+                try {
+                    await window.fs.deleteDoc(window.fs.doc(window.db, "vectech_cases", id));
+                    setStatusMsg("✅ 刪除成功");
+                    setSelectedIds(prev => prev.filter(item => item !== id)); // 從選取清單移除
+                    fetchCases(); // 重新讀取資料
+                } catch (error) {
+                    console.error("刪除錯誤:", error);
+                    setStatusMsg("❌ 刪除失敗");
+                }
+                setTimeout(() => setStatusMsg(""), 3000);
+            };
+
+            // 執行刪除 (批次)
+            const executeBatchDelete = async () => {
+                setStatusMsg("批次刪除中...");
+                try {
+                    // 使用 Promise.all 同時刪除多筆資料
+                    const deletePromises = selectedIds.map(id => 
+                        window.fs.deleteDoc(window.fs.doc(window.db, "vectech_cases", id))
+                    );
+                    await Promise.all(deletePromises);
                     
-                    <div className="flex-1 flex justify-center w-full">
-                        {currentView === 'lobby' && renderLobby()}
-                        {currentView === 'sales_form' && <div className="w-full max-w-3xl">{renderSalesForm()}</div>}
-                        {currentView === 'admin_login' && <div className="w-full">{renderAdminLogin()}</div>}
-                        {currentView === 'admin_dashboard' && renderAdminDashboard()}
+                    setStatusMsg(`✅ 成功刪除 ${selectedIds.length} 筆資料`);
+                    setSelectedIds([]); // 清空選取清單
+                    fetchCases(); // 重新讀取資料
+                } catch (error) {
+                    console.error("批次刪除錯誤:", error);
+                    setStatusMsg("❌ 批次刪除失敗");
+                }
+                setTimeout(() => setStatusMsg(""), 3000);
+            };
+
+            // 觸發確認對話框
+            const confirmDeleteSingle = (id) => {
+                setConfirmDialog({
+                    isOpen: true,
+                    message: "確定要刪除這筆紀錄嗎？此動作無法復原。",
+                    onConfirm: () => executeSingleDelete(id)
+                });
+            };
+
+            const confirmBatchDelete = () => {
+                if (selectedIds.length === 0) return;
+                setConfirmDialog({
+                    isOpen: true,
+                    message: `確定要刪除選取的 ${selectedIds.length} 筆紀錄嗎？此動作無法復原。`,
+                    onConfirm: () => executeBatchDelete()
+                });
+            };
+
+            return (
+                <div className="bg-white p-6 md:p-8 rounded-3xl shadow-xl max-w-5xl mx-auto">
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+                        <div className="flex items-center gap-3">
+                            <i className="ph ph-database text-3xl text-purple-600"></i>
+                            <h2 className="text-2xl font-black">管理總覽</h2>
+                        </div>
+                        
+                        {/* 批次操作按鈕區 */}
+                        <div className="flex items-center gap-4 w-full md:w-auto">
+                            <span className="text-sm text-slate-500 font-bold">已選取 {selectedIds.length} 筆</span>
+                            <button 
+                                onClick={confirmBatchDelete}
+                                disabled={selectedIds.length === 0}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold transition-all ${selectedIds.length > 0 ? 'bg-red-100 text-red-600 hover:bg-red-200' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}
+                            >
+                                <i className="ph ph-trash"></i> 批次刪除
+                            </button>
+                            <button onClick={fetchCases} className="p-2 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-xl transition-all">
+                                <i className="ph ph-arrows-clockwise text-xl"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* 自訂確認刪除對話框 (Modal) */}
+                    {confirmDialog.isOpen && (
+                        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                            <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl animate-fade-in">
+                                <div className="flex items-center gap-3 text-red-600 mb-4">
+                                    <i className="ph ph-warning-circle text-3xl"></i>
+                                    <h3 className="text-lg font-black">確認刪除</h3>
+                                </div>
+                                <p className="text-slate-600 mb-6 font-bold">{confirmDialog.message}</p>
+                                <div className="flex justify-end gap-3">
+                                    <button onClick={() => setConfirmDialog({isOpen: false})} className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold transition-colors">取消</button>
+                                    <button onClick={() => { confirmDialog.onConfirm(); setConfirmDialog({isOpen: false}); }} className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold transition-colors">確定刪除</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 資料表格 */}
+                    <div className="overflow-x-auto custom-scrollbar border border-slate-200 rounded-2xl">
+                        {isLoading ? (
+                            <div className="p-12 text-center text-slate-500 font-bold flex flex-col items-center gap-2">
+                                <i className="ph ph-spinner-gap animate-spin text-3xl"></i>
+                                載入中...
+                            </div>
+                        ) : cases.length === 0 ? (
+                            <div className="p-12 text-center text-slate-500 font-bold">
+                                尚無任何試做紀錄
+                            </div>
+                        ) : (
+                            <table className="w-full text-left border-collapse whitespace-nowrap">
+                                <thead>
+                                    <tr className="bg-slate-50 text-slate-500 text-sm border-b border-slate-200">
+                                        <th className="p-4 w-12 text-center">
+                                            <input 
+                                                type="checkbox" 
+                                                checked={selectedIds.length === cases.length && cases.length > 0}
+                                                onChange={toggleAll}
+                                                className="w-5 h-5 accent-blue-600 rounded cursor-pointer"
+                                            />
+                                        </th>
+                                        <th className="p-4 font-bold">建立時間</th>
+                                        <th className="p-4 font-bold">設備型號</th>
+                                        <th className="p-4 font-bold">試做批號</th>
+                                        <th className="p-4 font-bold">測試結果</th>
+                                        <th className="p-4 font-bold">異常紀錄</th>
+                                        <th className="p-4 font-bold text-center">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {cases.map((item) => (
+                                        <tr key={item.id} className={`border-b border-slate-100 hover:bg-slate-50 transition-colors ${selectedIds.includes(item.id) ? 'bg-blue-50/50' : ''}`}>
+                                            <td className="p-4 text-center">
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={selectedIds.includes(item.id)}
+                                                    onChange={() => toggleSelection(item.id)}
+                                                    className="w-5 h-5 accent-blue-600 rounded cursor-pointer"
+                                                />
+                                            </td>
+                                            <td className="p-4 text-sm text-slate-500">
+                                                {new Date(item.createdAt).toLocaleString()}
+                                            </td>
+                                            <td className="p-4 font-bold text-slate-800">{item.equipmentModel}</td>
+                                            <td className="p-4 font-bold text-slate-800">{item.batchNumber}</td>
+                                            <td className="p-4 text-slate-600 max-w-[200px] truncate" title={item.testData}>{item.testData}</td>
+                                            <td className="p-4 text-slate-600 max-w-[200px] truncate" title={item.anomaly}>{item.anomaly || '-'}</td>
+                                            <td className="p-4 text-center">
+                                                <button 
+                                                    onClick={() => confirmDeleteSingle(item.id)}
+                                                    className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                                    title="刪除此筆資料"
+                                                >
+                                                    <i className="ph ph-trash text-xl"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        // --- 主要應用程式 (負責切換頁面) ---
+        const App = () => {
+            const [isReady, setIsReady] = useState(false);
+            const [statusMsg, setStatusMsg] = useState("正在連線至雲端...");
+            // 步驟 2：新增頁面狀態，預設為 'form'
+            const [currentView, setCurrentView] = useState('form'); 
+
+            useEffect(() => {
+                const checkFirebase = setInterval(() => {
+                    if (window.firebaseReady) {
+                        clearInterval(checkFirebase);
+                        window.fs.signInAnonymously(window.auth)
+                            .then(() => { setIsReady(true); setStatusMsg(""); })
+                            .catch(err => setStatusMsg("連線失敗，請檢查金鑰或網路：" + err.message));
+                    }
+                }, 500);
+            }, []);
+
+            if (!isReady) {
+                return <div className="min-h-screen flex items-center justify-center font-bold text-xl">{statusMsg}</div>;
+            }
+
+            return (
+                <div className="min-h-screen pb-12">
+                    {/* 頂部導覽列 */}
+                    <nav className="bg-white shadow-sm mb-8 px-6 py-4">
+                        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
+                            <div className="font-black text-xl text-blue-900 tracking-wider">
+                                VECTECH <span className="text-blue-500">SYSTEM</span>
+                            </div>
+                            
+                            <div className="flex bg-slate-100 p-1 rounded-xl">
+                                <button 
+                                    onClick={() => setCurrentView('form')}
+                                    className={`px-6 py-2 rounded-lg font-bold text-sm transition-all ${currentView === 'form' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                >
+                                    回報表單
+                                </button>
+                                <button 
+                                    onClick={() => setCurrentView('admin')}
+                                    className={`px-6 py-2 rounded-lg font-bold text-sm transition-all ${currentView === 'admin' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                >
+                                    管理總覽
+                                </button>
+                            </div>
+                        </div>
+                    </nav>
+
+                    {/* 共用狀態訊息顯示 */}
+                    {statusMsg && (
+                        <div className="max-w-md mx-auto mb-6 px-4">
+                            <div className={`p-4 rounded-xl font-bold text-center shadow-sm ${statusMsg.includes('✅') ? 'bg-green-100 text-green-700' : statusMsg.includes('❌') ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
+                                {statusMsg}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 根據狀態切換顯示的元件 */}
+                    <div className="px-4">
+                        {currentView === 'form' ? (
+                            <SubmitForm setStatusMsg={setStatusMsg} statusMsg={statusMsg} />
+                        ) : (
+                            <AdminDashboard setStatusMsg={setStatusMsg} />
+                        )}
                     </div>
                 </div>
             );
